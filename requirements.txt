@@ -1,13 +1,14 @@
+# Updated requirements.txt - Add this to your GitHub repository
+
 streamlit
-openai
-langchain
-faiss-cpu
-python-dotenv
-requests
-beautifulsoup4
 pandas
 numpy
+plotly
+requests
+python-dotenv
+openai
+newsapi-python
+alpha-vantage
+yfinance
 matplotlib
 seaborn
-plotly
-yfinance
