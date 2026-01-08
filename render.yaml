@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: rag-finance-chatbot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: NEWS_API_KEY
+        sync: false
+      - key: AV_API_KEY
+        sync: false
