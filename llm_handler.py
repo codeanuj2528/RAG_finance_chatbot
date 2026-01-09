@@ -33,7 +33,7 @@ class LLMHandler:
             try:
                 self.last_provider = "groq"
                 response = self.groq_client.chat.completions.create(
-                    model=model or "llama-3.1-70b-versatile",
+                    model=model or "llama-3.3-70b-versatile",
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens
