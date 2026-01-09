@@ -34,14 +34,12 @@ class RAGPipeline:
         # Initialize ChromaDB with persistence
         self.client = chromadb.PersistentClient(path=CHROMA_PATH)
         
-        # Use OpenAI embeddings (fast, no local model needed)
-        if OPENAI_API_KEY:
-            self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=OPENAI_API_KEY,
-                model_name="text-embedding-3-small"
-            )
-        else:
-            # Fallback to default embeddings (less accurate but works without API key)
+        # Use default embeddings (no API key required, works offline)
+        # This avoids OpenAI quota issues and is free
+        try:
+            self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
+        except Exception as e:
+            print(f"Embedding init error: {e}")
             self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
         
         # Get or create collection
