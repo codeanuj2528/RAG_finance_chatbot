@@ -1,6 +1,5 @@
 """
-app.py - Main Streamlit Application for Personal Finance Assistant
-Enhanced with Groq fallback and Tavily web crawling
+app.py - Perfection for ANUJ - Minimalist & Premium
 """
 
 import streamlit as st
@@ -8,6 +7,9 @@ from dotenv import load_dotenv
 from datetime import datetime
 import pandas as pd
 import os
+import threading
+import time
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +17,7 @@ load_dotenv()
 # Local imports
 from data_fetcher import fetch_all_assets, get_top_movers
 from news import display_finance_news
-from chat import chat_interface
+from chat import chat_interface, upload_document
 from budgeting import budgeting_tool
 from technical_analysis import parse_technical_indicators
 
@@ -23,158 +25,227 @@ from technical_analysis import parse_technical_indicators
 AV_API_KEY = os.getenv("AV_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+
+# Keep-alive logic for Render
+@st.cache_resource
+def start_keep_alive():
+    if RENDER_URL:
+        def ping_loop():
+            while True:
+                try: requests.get(RENDER_URL)
+                except Exception: pass
+                time.sleep(600)
+        thread = threading.Thread(target=ping_loop, daemon=True)
+        thread.start()
+        return True
+    return False
+
+keep_alive_active = start_keep_alive()
 
 # Page configuration
 st.set_page_config(
-    page_title="Personal Finance Assistant",
-    page_icon="💰",
+    page_title="ANUJ'S FinAI",
+    page_icon="👑",
     layout="wide"
 )
 
 # Initialize session state variables
-if 'financial_data' not in st.session_state:
-    st.session_state['financial_data'] = ''
-
-if 'chat_history' not in st.session_state:
-    st.session_state['chat_history'] = []
-
+if 'financial_data' not in st.session_state: st.session_state['financial_data'] = ''
+if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
 if 'asset_data' not in st.session_state:
     st.session_state['asset_data'] = []
     st.session_state['asset_data_timestamp'] = None
 
-# Custom CSS for better UI
+# CSS - THE POWER RED & WHITE THEME
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #FF6B6B;
-        text-align: center;
-        margin-bottom: 1rem;
+    /* 1. Reset and Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=Inter:wght@300;400;600;800&display=swap');
+    
+    .stApp {
+        background: #ffffff !important;
+        color: #1a1a1a !important;
     }
-    .api-status {
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        margin: 0.25rem 0;
+
+    /* Force all text to readable dark color */
+    .stApp p, .stApp span, .stApp div, .stApp label, .stApp h1, .stApp h2, .stApp h3, [data-testid="stMarkdownContainer"] {
+        color: #1a1a1a !important;
+        font-family: 'Inter', sans-serif !important;
     }
-    .api-ok { background-color: #d4edda; color: #155724; }
-    .api-missing { background-color: #f8d7da; color: #721c24; }
+
+    /* Fix for icons */
+    [data-testid="stSidebar"], .stApp {
+        font-family: 'Inter', sans-serif !important;
+    }
+    
+    /* 2. HEADER - BOLD RED */
+    .hero-title {
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-size: 4.5rem !important;
+        font-weight: 800 !important;
+        background: linear-gradient(90deg, #FF0000, #8B0000) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        text-align: center !important;
+        margin-top: -40px !important;
+        margin-bottom: 0px !important;
+        letter-spacing: -2px !important;
+    }
+    
+    .hero-subtitle {
+        text-align: center !important;
+        color: #FF0000 !important;
+        font-size: 1rem !important;
+        letter-spacing: 5px !important;
+        margin-bottom: 40px !important;
+        text-transform: uppercase !important;
+        font-weight: 600 !important;
+    }
+
+    /* 3. SIDEBAR RED DESIGN */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa !important;
+        border-right: 2px solid #FF0000 !important;
+    }
+    
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h1 {
+        color: #FF0000 !important;
+    }
+    
+    /* Ensure sidebar text is readable */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
+        color: #1a1a1a !important;
+    }
+
+    /* 4. CHAT BUBBLES - WHITE WITH RED BORDERS */
+    [data-testid="stChatMessage"] {
+        background: #ffffff !important;
+        border-radius: 15px !important;
+        border: 1px solid #eeeeee !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important;
+        padding: 20px !important;
+        margin: 10px 0 !important;
+    }
+    
+    /* User message slightly different */
+    [data-testid="stChatMessage"]:nth-child(even) {
+        border-left: 5px solid #FF0000 !important;
+    }
+
+    /* 5. RED POWER BUTTONS */
+    .stButton>button {
+        width: 100% !important;
+        border-radius: 8px !important;
+        background: linear-gradient(90deg, #FF0000, #8B0000) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border: none !important;
+        text-transform: uppercase !important;
+    }
+    
+    .stButton>button:hover {
+        background: #000000 !important;
+        color: white !important;
+    }
+
+    /* Metric refinement */
+    [data-testid="stMetricValue"] {
+        color: #FF0000 !important;
+        font-weight: 800 !important;
+    }
+    
+    /* Input border focus */
+    .stTextArea textarea:focus {
+        border-color: #FF0000 !important;
+    }
+
+    /* Hide Streamlit components */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# Main Title
-st.markdown('<p class="main-header">💰 Personal Finance Assistant</p>', unsafe_allow_html=True)
-st.markdown("---")
+# THE PERFECT BRANDING
+st.markdown('<h1 class="hero-title">👑 ANUJ\'S FINANCE AI</h1>', unsafe_allow_html=True)
+st.markdown('<p class="hero-subtitle">Mera Wala Custom Wealth Agent</p>', unsafe_allow_html=True)
 
-# Button to load all asset data from Alpha Vantage
-col1, col2 = st.columns([8, 2])
-with col2:
-    if st.session_state['asset_data_timestamp']:
-        st.write(f"**Last Updated:**")
-        st.write(f"{st.session_state['asset_data_timestamp']}")
-    else:
-        st.write("**Data not loaded.**")
-    
-    if st.button("🔄 Update Data", use_container_width=True):
-        with st.spinner("Fetching assets..."):
-            st.session_state['asset_data'] = fetch_all_assets()
-            st.session_state['asset_data_timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            st.success("Asset data updated!")
-
-# Sidebar
+# Sidebar - Clean & Proper
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.title("📂 Control Panel")
+    st.divider()
     
-    # API Status
-    st.subheader("API Status")
+    # Navigation
+    menu = st.radio(
+        "SELECT VIEW",
+        ["📚 Document Analyst", "🌐 Market Intelligence", "📊 Market Hub", "🛠️ Wealth Tools"],
+        index=0
+    )
     
-    if OPENAI_API_KEY:
-        st.markdown('<div class="api-status api-ok">✅ OpenAI API</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="api-status api-missing">❌ OpenAI API</div>', unsafe_allow_html=True)
+    st.divider()
     
-    if GROQ_API_KEY:
-        st.markdown('<div class="api-status api-ok">✅ Groq API (Fallback)</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="api-status api-missing">⚠️ Groq API (Optional)</div>', unsafe_allow_html=True)
+    # Financial Profile
+    st.subheader("👤 User Profile")
+    financial_data_input = st.text_area(
+        "Your Financial Summary",
+        value=st.session_state['financial_data'],
+        height=150,
+        placeholder="E.g. Income: 1L, Savings: 20k, Goal: House..."
+    )
+    if st.button("💾 SAVE PROFILE", use_container_width=True):
+        st.session_state['financial_data'] = financial_data_input
+        st.success("Profile Locked! ✅")
     
-    if AV_API_KEY:
-        st.markdown('<div class="api-status api-ok">✅ Alpha Vantage API</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="api-status api-missing">❌ Alpha Vantage API</div>', unsafe_allow_html=True)
+    st.divider()
     
-    st.markdown("---")
+    # Knowledge Base (Vault) - Always available for any mode
+    st.subheader("📚 Finance Vault")
+    upload_document()
     
-    # Financial Data Input
-    st.header("📊 Your Financial Data")
-    with st.form("financial_data_form"):
-        st.write("Enter financial data for personalized advice:")
-        financial_data_input = st.text_area(
-            "Financial Data",
-            value=st.session_state['financial_data'],
-            height=150,
-            help="Enter income, expenses, investments, goals, etc."
-        )
-        submitted = st.form_submit_button("💾 Save")
-        if submitted:
-            st.session_state['financial_data'] = financial_data_input
-            st.success("Financial data saved!")
+    if keep_alive_active:
+        st.divider()
+        st.caption("🟢 System Live (Keep-Alive)")
 
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📰 News", "📈 Assets", "💬 Chat", "🛠️ Tools"])
-
-# 1) News Tab
-with tab1:
-    display_finance_news()
-
-# 2) Assets Tab
-with tab2:
-    st.header("📈 Asset Data")
+# Navigation Routing
+if menu == "📚 Document Analyst":
+    chat_interface(mode="pdf")
+    
+elif menu == "🌐 Market Intelligence":
+    chat_interface(mode="news")
+    
+elif menu == "📊 Market Hub":
+    st.header("📈 Market Intelligence Hub")
+    
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        if st.button("REFRESH DATA"):
+            with st.spinner("Updating..."):
+                st.session_state['asset_data'] = fetch_all_assets()
+                st.session_state['asset_data_timestamp'] = datetime.now().strftime('%H:%M:%S')
+    with c2:
+        if st.session_state['asset_data_timestamp']:
+            st.info(f"Market Sync: {st.session_state['asset_data_timestamp']}")
+            
     if st.session_state['asset_data']:
-        df = pd.DataFrame(st.session_state['asset_data'])
-        st.dataframe(df, use_container_width=True)
-
-        # Technical indicator section
-        st.subheader("📊 Technical Indicators")
-        if st.button("📉 Parse Tech Indicators for 1st Asset"):
-            if not df.empty:
-                first_ticker = df.iloc[0]['Ticker']
-                st.write(f"Parsing indicators for **{first_ticker}**...")
-                with st.spinner("Fetching indicators..."):
-                    indicators_dict = parse_technical_indicators(first_ticker)
-                    if indicators_dict:
-                        st.json(indicators_dict)
-                    else:
-                        st.warning("No indicators available")
+        st.dataframe(pd.DataFrame(st.session_state['asset_data']), use_container_width=True)
     else:
-        st.info("📥 No asset data loaded. Click 'Update Data' at the top right to load data.")
+        st.warning("Hit Refresh to populate the market terminal.")
+        
+    st.divider()
+    
+    n1, n2 = st.columns(2)
+    with n1:
+        st.subheader("📰 Market Headlines")
+        display_finance_news()
+    with n2:
+        st.subheader("🚀 High Velocity Crypto")
+        tm = get_top_movers()
+        if tm: st.dataframe(pd.DataFrame(tm), use_container_width=True)
 
-    # Crypto top movers
-    st.subheader("🚀 Top Cryptocurrency Movers (24h Change)")
-    if st.button("🔄 Refresh Crypto Data"):
-        with st.spinner("Fetching crypto data..."):
-            top_movers = get_top_movers()
-            if top_movers:
-                st.dataframe(pd.DataFrame(top_movers), use_container_width=True)
-            else:
-                st.warning("Failed to retrieve cryptocurrency data.")
-
-# 3) Chat Tab
-with tab3:
-    chat_interface()
-
-# 4) Tools Tab
-with tab4:
+elif menu == "🛠️ Wealth Tools":
     budgeting_tool()
 
-# Footer
+# FOOTER
 st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; color: #666; font-size: 0.85rem;">
-        Personal Finance Assistant • Powered by OpenAI & Groq • 
-        <a href="https://github.com/codeanuj2528/RAG_finance_chatbot" target="_blank">GitHub</a>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown('<div style="text-align:center; color:#555; font-weight:300;">© 2026 | CUSTOM BUILT FOR ANUJ</div>', unsafe_allow_html=True)

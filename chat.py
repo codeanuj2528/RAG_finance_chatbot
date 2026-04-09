@@ -8,6 +8,7 @@ import re
 import yfinance as yf
 import os
 from typing import Optional, List, Dict
+import pandas as pd
 from dotenv import load_dotenv
 
 # Import our modules
@@ -18,33 +19,34 @@ from tavily_search import get_tavily_search, is_tavily_available
 load_dotenv()
 
 
-# System prompt for the finance assistant
-SYSTEM_PROMPT = """You are an expert Personal Finance Assistant powered by advanced RAG (Retrieval-Augmented Generation) technology. You provide accurate, helpful, and personalized financial advice.
+# Specialized System Prompts
+DOC_ANALYST_PROMPT = """You are an expert Document Analysis Specialist. 
+Your goal is to answer questions EXCLUSIVELY based on the provided PDF context. 
+If the information is not in the documents, state that clearly. 
+Cite filenames and specific details from the retrieved chunks."""
 
-## Your Capabilities:
-1. **Document Knowledge**: You have access to financial books and documents uploaded by the user
-2. **Real-time Data**: You can access current market data and financial news
-3. **Personalized Advice**: You consider the user's financial situation when giving advice
+MARKET_INTEL_PROMPT = """You are a Market Intelligence Expert. 
+Your goal is to analyze real-time news, stock data, and market trends. 
+Provide a 'News-Based Guidance' (EME analysis) to guide the user on potential market moves. 
+Focus on data from Tavily, NewsAPI, and YFinance."""
 
-## Guidelines:
-- Always cite your sources when using retrieved information
-- Be specific and actionable in your advice
-- Remind users to consult professionals for major financial decisions
-- If you're unsure, say so rather than making things up
-- Format your responses clearly with headers and bullet points when appropriate
-
-## Response Format:
-- Start with a direct answer to the question
-- Provide supporting details and context
-- Include relevant citations from documents when applicable
-- End with actionable next steps if appropriate"""
+SYSTEM_PROMPT = """You are an expert Personal Finance Assistant. 
+Provide accurate, helpful, and professional advice based on the available context."""
 
 
 def get_financial_context() -> str:
-    """Get user's financial context from session state"""
+    """Get user's financial context and current asset data from session state"""
+    context = []
+    
     if st.session_state.get('financial_data'):
-        return f"User's Financial Situation:\n{st.session_state['financial_data']}"
-    return ""
+        context.append(f"## User's Financial Profile:\n{st.session_state['financial_data']}")
+        
+    if st.session_state.get('asset_data'):
+        assets_df = pd.DataFrame(st.session_state['asset_data'])
+        assets_str = assets_df.to_string(index=False)
+        context.append(f"## Current Portfolio/Market Data:\n{assets_str}")
+        
+    return "\n\n".join(context)
 
 
 def get_rag_context(query: str) -> tuple:
@@ -101,41 +103,43 @@ def display_chart_for_asset(message: str) -> Optional[object]:
     return None
 
 
-def generate_assistant_response(user_input: str) -> tuple:
+def generate_assistant_response(user_input: str, mode: str = "general") -> tuple:
     """
-    Generate RAG-powered response
+    Generate specialized response based on mode
     Returns: (response_text, sources_list, provider_used)
     """
-    # Gather all context
     financial_context = get_financial_context()
-    rag_context, rag_sources = get_rag_context(user_input)
-    web_context = get_web_context(user_input)
+    rag_context, rag_sources = "", []
+    web_context = ""
     
-    # Build conversation history
+    # Context Filtering based on Mode
+    if mode == "pdf":
+        rag_context, rag_sources = get_rag_context(user_input)
+        sys_prompt = DOC_ANALYST_PROMPT
+    elif mode == "news":
+        web_context = get_web_context(user_input)
+        sys_prompt = MARKET_INTEL_PROMPT
+    else:
+        rag_context, rag_sources = get_rag_context(user_input)
+        web_context = get_web_context(user_input)
+        sys_prompt = SYSTEM_PROMPT
+
+    # Build conversation history (Mode-specific history is handled in chat_interface)
     conversation_history = ""
-    if len(st.session_state.get('chat_history', [])) > 1:
-        recent = st.session_state['chat_history'][-6:]  # Last 6 messages
+    history_key = f'chat_history_{mode}'
+    if len(st.session_state.get(history_key, [])) > 1:
+        recent = st.session_state[history_key][-6:]
         for msg in recent:
             role = "User" if msg['role'] == 'user' else "Assistant"
-            content = msg['content'][:500]  # Truncate for context window
-            conversation_history += f"{role}: {content}\n"
+            conversation_history += f"{role}: {msg['content'][:500]}\n"
     
     # Construct the prompt
-    context_parts = []
+    context_parts = [f"## User's Financial Profile\n{financial_context}"]
+    if rag_context: context_parts.append(f"## Retrieved Document Context\n{rag_context}")
+    if web_context: context_parts.append(f"## Current Web & News Information\n{web_context}")
+    if conversation_history: context_parts.append(f"## Recent Conversation\n{conversation_history}")
     
-    if financial_context:
-        context_parts.append(f"## User's Financial Profile\n{financial_context}")
-    
-    if rag_context:
-        context_parts.append(f"## Retrieved Document Context\n{rag_context}")
-    
-    if web_context:
-        context_parts.append(f"## Current Web Information\n{web_context}")
-    
-    if conversation_history:
-        context_parts.append(f"## Recent Conversation\n{conversation_history}")
-    
-    full_context = "\n\n".join(context_parts) if context_parts else "No additional context available."
+    full_context = "\n\n".join(context_parts)
     
     user_prompt = f"""Based on the following context, please answer the user's question.
 
@@ -150,19 +154,22 @@ Please provide a helpful, accurate response. If you use information from the ret
     # Get LLM response
     llm = get_llm()
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt}
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": f"Context:\n{full_context}\n\nQuestion: {user_input}"}
     ]
     
     response = llm.chat(messages, temperature=0.7, max_tokens=1024)
     provider = llm.last_provider or "unknown"
-    
     return response, rag_sources, provider
 
 
-def chat_interface():
-    """Main chat interface with RAG integration"""
-    st.header("💬 Chat with Your Personal Finance Assistant")
+def chat_interface(mode: str = "general"):
+    """Main chat interface with specialized mode support"""
+    header_name = "ANUJ'S Intelligence Terminal"
+    if mode == "pdf": header_name = "📚 Document Analysis Expert"
+    elif mode == "news": header_name = "🌐 Market Intelligence Expert"
+    
+    st.header(f"💬 {header_name}")
     
     # Initialize RAG on first load with error handling
     if 'rag_initialized' not in st.session_state:
@@ -176,107 +183,65 @@ def chat_interface():
             st.session_state['rag_initialized'] = True
             st.session_state['rag_stats'] = {"total_documents": 0, "error": str(e)}
     
-    # Show RAG status in expander
-    with st.expander("📊 System Status", expanded=False):
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            stats = st.session_state.get('rag_stats', {})
-            st.metric("📚 Documents Indexed", stats.get('total_documents', 0))
-        
-        with col2:
-            llm = get_llm()
-            providers = llm.get_available_providers()
-            st.metric("🤖 LLM Providers", len(providers))
-            st.caption(", ".join(providers) if providers else "None")
-        
-        with col3:
-            tavily_status = "✅ Active" if is_tavily_available() else "❌ Not configured"
-            st.metric("🌐 Web Search", tavily_status)
-    
+    # Separate histories by mode
+    history_key = f'chat_history_{mode}'
+    if history_key not in st.session_state:
+        st.session_state[history_key] = []
+
     # Display chat history
-    for message in st.session_state.get('chat_history', []):
+    for message in st.session_state[history_key]:
         with st.chat_message(message['role']):
             st.markdown(message['content'])
-            
-            # Show sources if available
             if message.get('sources'):
                 with st.expander("📖 Sources"):
-                    for source in message['sources']:
-                        st.caption(f"• {source}")
-            
-            # Show chart if available
+                    for source in message['sources']: st.caption(f"• {source}")
             if message.get('chart_data') is not None:
                 st.line_chart(message['chart_data'])
     
     # Chat input
-    user_input = st.chat_input("Ask me anything about personal finance...")
+    prompt_text = "Ask about your PDFs..." if mode == "pdf" else "Ask about market news & data..."
+    user_input = st.chat_input(prompt_text)
     
     if user_input:
-        # Add user message
-        st.session_state['chat_history'].append({
-            "role": "user",
-            "content": user_input
-        })
+        st.session_state[history_key].append({"role": "user", "content": user_input})
+        with st.chat_message("user"): st.markdown(user_input)
         
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        # Generate response
         with st.chat_message("assistant"):
-            with st.spinner("🧠 Thinking..."):
-                # Check for chart request
+            with st.spinner("🧠 Analyzing..."):
                 chart_data = display_chart_for_asset(user_input)
-                
-                # Generate RAG response
-                response, sources, provider = generate_assistant_response(user_input)
-                
-                # Display response
+                response, sources, provider = generate_assistant_response(user_input, mode=mode)
                 st.markdown(response)
-                
-                # Show sources
                 if sources:
                     with st.expander("📖 Sources Used"):
-                        for source in sources:
-                            st.caption(f"• {source}")
-                
-                # Show chart if applicable
-                if chart_data is not None:
-                    st.line_chart(chart_data)
-                
-                # Show provider info
+                        for source in sources: st.caption(f"• {source}")
+                if chart_data is not None: st.line_chart(chart_data)
                 st.caption(f"_Powered by {provider.upper()}_")
         
-        # Save assistant message
         assistant_message = {
             "role": "assistant",
             "content": response,
             "sources": sources,
-            "provider": provider
+            "provider": provider,
+            "chart_data": chart_data
         }
-        
-        if chart_data is not None:
-            assistant_message['chart_data'] = chart_data
-        
-        st.session_state['chat_history'].append(assistant_message)
-        
-        # Rerun to update UI
+        st.session_state[history_key].append(assistant_message)
         st.rerun()
 
 
 def upload_document():
     """Handle document upload for RAG"""
-    st.subheader("📄 Upload Financial Documents")
+    # Header removed for cleaner sidebar integration
     
     uploaded_file = st.file_uploader(
-        "Upload a PDF to add to your knowledge base",
+        "Upload PDF",
         type=['pdf'],
-        help="Upload financial documents, statements, or books to get personalized insights"
+        help="Upload financial documents to get personalized insights",
+        label_visibility="collapsed"
     )
     
     if uploaded_file is not None:
         # Save temporarily
+        os.makedirs("data", exist_ok=True)
         temp_path = f"./data/{uploaded_file.name}"
         
         with open(temp_path, "wb") as f:

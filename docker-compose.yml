@@ -1,0 +1,12 @@
+services:
+  finance-bot:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: always
+    container_name: rag-finance-chatbot

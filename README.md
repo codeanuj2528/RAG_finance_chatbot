@@ -1,65 +1,59 @@
-# RAG Finance Chatbot
+# 🚀 RAG Finance Chatbot (Docker & Groq Optimized)
 
-Personal Finance Assistant with RAG (Retrieval-Augmented Generation) capabilities.
+A premium Personal Finance Assistant powered by Retrieval-Augmented Generation (RAG), Groq LLMs, and real-time market data.
 
-## Features
-- 💬 AI Chat with OpenAI + Groq fallback
-- 📄 PDF upload and RAG-based Q&A
-- 📰 Finance news with NewsAPI + Tavily fallback
-- 📈 Asset tracking (stocks, forex, crypto)
-- 🛠️ Budgeting tools with 50/30/20 recommendations
+## ✨ ANUJ'S SPECIALIZED EDITIONS
+- **📚 Document Analyst Mode**: Query your private financial PDFs indexed in the ChromaDB vault.
+- **🌐 Market Intelligence Mode**: Real-time market news (Tavily), stock charts (YFinance), and "News-Based Guidance".
+- **🤖 Groq-First AI**: Powered by `llama-3.3-70b-versatile` (Ultra-fast).
+- **🔴 Power Crimson Theme**: High-contrast White & Red premium interface.
+- **🐳 One-Command Docker**: Fully-persistent setup for your finance data.
+- **🔄 Keep-Alive Engine**: Built-in background thread to prevent Render free-tier sleep.
 
-## Environment Variables
+## 🛠️ Environment Variables
 
-Set these in Render Dashboard → Environment:
+Create a `.env` file in the root directory:
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for chat & embeddings | Yes |
-| `GROQ_API_KEY` | Groq API key (fallback LLM) | Optional |
-| `TAVILY_API_KEY` | Tavily API for web search | Optional |
-| `NEWS_API_KEY` | NewsAPI for finance news | Optional |
-| `AV_API_KEY` | Alpha Vantage for stock data | Optional |
+| Variable | Description | Source |
+|----------|-------------|--------|
+| `GROQ_API_KEY` | **Primary LLM** API Key | [Groq Cloud](https://console.groq.com/) |
+| `OPENAI_API_KEY`| Fallback LLM & Embeddings | [OpenAI](https://platform.openai.com/) |
+| `AV_API_KEY`   | Real-time Market Data | [Alpha Vantage](https://www.alphavantage.co/) |
+| `TAVILY_API_KEY`| Modern Web Search | [Tavily AI](https://tavily.com/) |
+| `NEWS_API_KEY`  | Finance News | [NewsAPI](https://newsapi.org/) |
+| `RENDER_EXTERNAL_URL` | App URL for Keep-Alive | [Render Dashboard](https://dashboard.render.com/) |
 
-## Deploy to Render
+## 🐳 Docker Setup (Recommended)
 
-1. Push this folder to GitHub
-2. Go to [render.com](https://render.com) → New → Web Service
-3. Connect your GitHub repo
-4. Set:
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true`
-5. Add environment variables in the Environment tab
-6. Deploy!
+1. **Clone & Setup**:
+   ```bash
+   git clone https://github.com/codeanuj2528/RAG_finance_chatbot
+   cd RAG_finance_chatbot
+   cp .env.example .env  # Fill in your keys
+   ```
 
-## Local Development
+2. **Run with Docker Compose**:
+   ```bash
+   docker-compose up --build
+   ```
+   *Access at: http://localhost:8501*
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+## 💻 Local Development (Manual)
 
-# Run locally
-streamlit run app.py
-```
+1. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## API Keys Setup
+2. **Run Streamlit**:
+   ```bash
+   streamlit run app.py
+   ```
 
-Your `.env` file should look like:
-```
-OPENAI_API_KEY=sk-...
-GROQ_API_KEY=gsk_...
-TAVILY_API_KEY=tvly-...
-NEWS_API_KEY=...
-AV_API_KEY=...
-```
+## 🚀 Deployment
 
-## Troubleshooting
+This application is ready for deployment on **Render**, **Railway**, or any Docker-compatible cloud provider. 
+- **ChromaDB Persistence**: Ensure you mount a volume to `/app/chroma_db` in your production environment to keep your indexed PDFs.
 
-**Blank page on Render?**
-- Make sure `Procfile` exists with correct start command
-- Check that environment variables are set
-- View logs in Render dashboard
-
-**Chat not working?**
-- Verify `OPENAI_API_KEY` is set correctly
-- Groq will be used as fallback if OpenAI fails
+---
+*Built with ❤️ for Personal Finance Excellence.*
